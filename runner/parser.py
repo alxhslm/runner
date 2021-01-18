@@ -3,6 +3,12 @@
 import fitparse, os
 from lxml import objectify
 
+from datetime import datetime
+
+import numpy as np
+import scipy.signal as sig
+import geopy.distance as gp
+
 import runner.model as model
 
 class ParserNotFoundError(RuntimeError):
@@ -18,23 +24,48 @@ class GPXParser:
     def _parse_activity(self, activity_xml):
         activity = model.Activity()
 
-        for track in activity_xml.trk:
-            activity.laps.append(self._parse_track(track))
+        track = activity_xml.trk[0]
+        activity.laps = self._parse_track(track)
 
         return activity
 
     def _parse_track(self, track_xml):
-        track = model.Lap()
+        track = []
 
         for segment in track_xml.trkseg:
-            for trackpoint in segment.trkpt:
-                track.trackpoints.append(self._parse_trackpoint(trackpoint))
+            bErr = False
+            try:
+                pts = segment.trkpt
+            except:
+                bErr = True
 
-        track.duration = (track.end_time - track.start_time).total_seconds()
+            if not bErr:
+                lap = model.Lap()
+                last_pt = None
+                for trackpoint in segment.trkpt:
+                    trkpt = self._parse_trackpoint(trackpoint, last_pt)
+                    last_pt = trkpt
+                    lap.trackpoints.append(trkpt)
+
+                speeds = np.array([trkpt.speed for trkpt in lap.trackpoints])
+
+                if len(speeds) > 6:
+                    b, a = sig.butter(1, 0.25, btype="low")
+                    speed_filtered = np.clip(sig.filtfilt(b, a, speeds),0,np.Inf)
+
+                    for (trackpoint, spd) in zip(lap.trackpoints, speed_filtered):
+                        trackpoint.speed = spd
+
+                track += [lap]
+
+
+        track = remove_adjacent_lifts(track)
+        track = make_distances_consecutive(track)
+        track = [lap for lap in track if lap.altitude < 0]
 
         return track
 
-    def _parse_trackpoint(self, trackpoint_xml):
+    def _parse_trackpoint(self, trackpoint_xml, last_point):
         trackpoint = model.Trackpoint(trackpoint_xml.time.pyval)
 
         trackpoint.altitude = self._get_or_else(trackpoint_xml, 'ele', 0)
@@ -50,6 +81,21 @@ class GPXParser:
 
             if heart_rate is not None:
                 trackpoint.heart_rate = heart_rate
+
+        if last_point:
+            last = (last_point.position.latitude, last_point.position.longitude)
+            this = (trackpoint.position.latitude, trackpoint.position.longitude)
+
+            dh = gp.distance(last, this).km * 1000
+            dv = trackpoint.altitude - last_point.altitude
+            ds = np.hypot(dh, dv)
+
+            trackpoint.distance = last_point.distance + ds
+            dt = trackpoint.time - last_point.time
+            trackpoint.speed = ds / (dt.total_seconds() + 1e-6)
+        else:
+            trackpoint.distance = 0
+            trackpoint.speed = 0
 
         return trackpoint
 
@@ -194,3 +240,24 @@ def parse_from_file(filename):
     parser = parser_for_file(filename)
 
     return parser.parse(filename)
+
+def remove_adjacent_lifts(track):
+    new_track = []
+    for current in track:
+        if len(new_track) > 0 and current.altitude * new_track[-1].altitude > 0:
+                new_track[-1] = new_track[-1].merge(current)
+        else:
+            new_track+=[current]
+    
+    return new_track
+
+def make_distances_consecutive(track):
+    offset = 0
+    new_track = []
+    for lap in track:
+        for trkpt in lap.trackpoints:
+            trkpt.distance += offset
+        offset =  lap.trackpoints[-1].distance
+        new_track+=[lap]
+    return new_track
+    

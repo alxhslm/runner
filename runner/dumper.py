@@ -136,12 +136,25 @@ class TCXDumper:
     def _dump_activity(self, activity):
         buffer = []
 
-        buffer.append(2*self.TAB + '<Activity Sport="%s">\n' % "Running" if activity.type is None else activity.type)
+        buffer.append(2*self.TAB + '<Activity Sport="%s">\n' % "Other" if activity.type is None else activity.type)
         buffer.append(3*self.TAB + '<Id>%s</Id>\n' % dump_date(activity.identifier))
+        buffer.append(3*self.TAB + '<Intensity>%s</Intensity>\n' % "Active")
+        buffer.append(3*self.TAB + '<TriggerMethod>%s</TriggerMethod>\n' % "Manual")
         for lap in activity.laps:
             buffer.append(self._dump_lap(lap))
+
+        buffer.append(self._dump_creator)
         buffer.append(2*self.TAB + '</Activity>\n')
 
+        return ''.join(buffer)
+        
+    def _dump_creator(self):
+        buffer = []
+        buffer.append(3*self.TAB + '<Creator xsi:type="Device_t">\n')
+        buffer.append(4*self.TAB + "<Name>Forerunner 645 Music</Name>\n")
+        buffer.append(4*self.TAB + "<UnitId>3967023754</UnitId>\n")
+        buffer.append(4*self.TAB + "<ProductID>2888</ProductID>\n")
+        buffer.append(3*self.TAB + "</Creator>\n")
         return ''.join(buffer)
 
     def _dump_lap(self, lap):
@@ -149,13 +162,13 @@ class TCXDumper:
 
         buffer.append(3*self.TAB + '<Lap StartTime="%s">\n' % dump_date(lap.start_time))
         buffer.append(4*self.TAB + '<TotalTimeSeconds>%d</TotalTimeSeconds>\n' % lap.duration)
-        buffer.append(4*self.TAB + '<DistanceMeters>%d</DistanceMeters>\n' % lap.distance)
-        buffer.append(4*self.TAB + '<Calories>%d</Calories>\n' % lap.calories)
+        buffer.append(4*self.TAB + '<DistanceMeters>%f</DistanceMeters>\n' % lap.distance)
+        # buffer.append(4*self.TAB + '<Calories>%d</Calories>\n' % lap.calories)
         buffer.append(4*self.TAB + '<MaximumSpeed>%f</MaximumSpeed>\n' % lap.max_speed)
-        buffer.append(4*self.TAB + '<AverageHeartRateBpm><Value>%d</Value></AverageHeartRateBpm>\n' % lap.avg_heart_rate)
-        buffer.append(4*self.TAB + '<MaximumHeartRateBpm><Value>%d</Value></MaximumHeartRateBpm>\n' % lap.max_heart_rate)
-        if lap.trigger_method is not None:
-            buffer.append(4*self.TAB + '<TriggerMethod>%s</TriggerMethod>\n' % lap.trigger_method)
+        # buffer.append(4*self.TAB + '<AverageHeartRateBpm><Value>%d</Value></AverageHeartRateBpm>\n' % lap.avg_heart_rate)
+        # buffer.append(4*self.TAB + '<MaximumHeartRateBpm><Value>%d</Value></MaximumHeartRateBpm>\n' % lap.max_heart_rate)
+        # if lap.trigger_method is not None:
+        #     buffer.append(4*self.TAB + '<TriggerMethod>%s</TriggerMethod>\n' % lap.trigger_method)
 
         buffer.append(4*self.TAB + '<Track>\n')
         for trackpoint in lap.trackpoints:
@@ -171,9 +184,15 @@ class TCXDumper:
 
         buffer.append(5*self.TAB + '<Trackpoint>\n')
         buffer.append(6*self.TAB + '<Time>%s</Time>\n' % dump_date(trackpoint.time))
-        buffer.append(6*self.TAB + '<DistanceMeters>%d</DistanceMeters>\n' % trackpoint.distance)
-        buffer.append(6*self.TAB + '<AltitudeMeters>%d</AltitudeMeters>\n' % trackpoint.altitude)
-        buffer.append(6*self.TAB + '<HeartRateBpm><Value>%d</Value></HeartRateBpm>\n' % trackpoint.heart_rate)
+        buffer.append(6*self.TAB + '<DistanceMeters>%f</DistanceMeters>\n' % trackpoint.distance)
+        buffer.append(6*self.TAB + '<AltitudeMeters>%f</AltitudeMeters>\n' % trackpoint.altitude)
+        # buffer.append(6*self.TAB + '<HeartRateBpm><Value>%d</Value></HeartRateBpm>\n' % trackpoint.heart_rate)
+
+        buffer.append(6*self.TAB + "<Extensions>\n")
+        buffer.append(7*self.TAB + "<ns3:TPX>\n")
+        buffer.append(8*self.TAB + "<ns3:Speed>%f</ns3:Speed>\n" % trackpoint.speed)
+        buffer.append(7*self.TAB + "</ns3:TPX>\n")
+        buffer.append(6*self.TAB + "</Extensions>\n")
 
         if trackpoint.position is not None:
             buffer.append(self._dump_position(trackpoint.position))

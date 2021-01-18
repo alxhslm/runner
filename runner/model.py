@@ -57,10 +57,8 @@ class Lap:
         self._start_time = start_time if start_time is None or type(start_time) is datetime else datetime.strptime(start_time, '%Y-%m-%dT%H:%M:%S.%fZ')
         self.trackpoints = []
 
-        self.duration = 0 # in seconds
-        self.distance = 0 # in meters
         self.calories = 0
-        self.max_speed = 0 # in meters per second
+        self._max_speed = 0 # in meters per second
         self._trigger_method = None
 
         self._avg_heart_rate = 0 # in bpm
@@ -105,6 +103,22 @@ class Lap:
     @avg_heart_rate.setter
     def avg_heart_rate(self, value):
         self._avg_heart_rate = value
+    
+    @property
+    def max_speed(self):
+        return (
+            self._max_speed
+            if self._max_speed is not 0
+            else max(trackpoint.speed for trackpoint in self.trackpoints)
+        )
+
+    @property
+    def duration(self):
+        return (self.end_time - self.start_time).total_seconds()
+    
+    @property
+    def distance(self):
+        return self.trackpoints[-1].distance - self.trackpoints[0].distance
 
     def __repr__(self):
         return '<Lap: started at %s; duration %d sec; %d meters (%d trackpoints)>' % (
@@ -113,10 +127,20 @@ class Lap:
             self.distance,
             len(self.trackpoints)
         )
+    
+    @property
+    def altitude(self):
+        return self.trackpoints[-1].altitude - self.trackpoints[0].altitude
+    
+    def merge(self,other):
+        new = Lap(start_time=self.start_time)
+        new.trackpoints = self.trackpoints + other.trackpoints
+        return new
+
 
 class Trackpoint:
     def __init__(self, time=None):
-        self.time = time if type(time) is datetime else datetime.strptime(time, '%Y-%m-%dT%H:%M:%S.%fZ')
+        self.time = time if type(time) is datetime else datetime.strptime(time, "%Y-%m-%dT%H:%M:%S%z")
         self.distance = 0 # in meters
         self.altitude = 0 # in meters
         self.heart_rate = 0 # in bpm
